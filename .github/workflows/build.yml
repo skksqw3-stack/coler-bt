@@ -1,0 +1,97 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # اجازه اجرای دستی
+
+jobs:
+  build-android:
+    name: Build APK with Buildozer
+    runs-on: ubuntu-22.04
+
+    steps:
+      # ۱. دریافت کد پروژه
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ۲. نصب Python 3.11
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # ۳. نصب وابستگی‌های سیستمی مورد نیاز
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            zip \
+            unzip \
+            openjdk-17-jdk \
+            autoconf \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libtinfo5 \
+            cmake \
+            libffi-dev \
+            libssl-dev \
+            build-essential \
+            ccache
+
+      # ۴. تنظیم JAVA_HOME
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # ۵. نصب Buildozer و Cython
+      - name: Install Buildozer and Cython
+        run: |
+          python -m pip install --upgrade pip
+          pip install buildozer
+          pip install cython==0.29.36
+
+      # ۶. کش کردن Buildozer و SDK/NDK برای سرعت بیشتر
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.gradle
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-
+
+      # ۷. ساخت APK
+      - name: Build APK with Buildozer
+        run: |
+          buildozer -v android debug
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+
+      # ۸. آپلود فایل APK به عنوان artifact
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-apk
+          path: bin/*.apk
+          if-no-files-found: warn
+          retention-days: 30
+
+      # ۹. آپلود لاگ در صورت شکست
+      - name: Upload build log on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: buildozer-log
+          path: .buildozer/android/platform/build-*/build.log
+          if-no-files-found: warn
