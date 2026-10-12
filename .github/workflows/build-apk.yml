@@ -1,0 +1,76 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            git zip unzip openjdk-17-jdk \
+            autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            libtinfo5 cmake libffi-dev libssl-dev \
+            libltdl-dev ccache
+
+      - name: Install pip and buildozer
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install buildozer==1.5.0 cython==0.29.36
+
+      - name: Verify files
+        run: |
+          echo "===== FILES ====="
+          ls -la
+          echo ""
+          echo "===== buildozer.spec ====="
+          cat buildozer.spec
+
+      - name: Build APK
+        run: |
+          yes | buildozer -v android debug 2>&1 | tee build.log
+        continue-on-error: true
+
+      - name: Show last 200 lines
+        if: always()
+        run: |
+          echo "===== LAST 200 LINES ====="
+          tail -200 build.log || echo "No log"
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
+
+      - name: Upload APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coolercontrol-apk
+          path: bin/*.apk
+          if-no-files-found: ignore
